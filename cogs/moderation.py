@@ -176,6 +176,89 @@ class Moderation(commands.Cog):
         else:
             await ctx.respond(f"An error occured: {str(error)}", ephemeral=True)
             logger.error(f"Ban command error: {error}")
+    
+    @mod.command(name="kick", description="Kick a member from the server")
+    @commands.has_permissions(kick_members=True)
+    @commands.bot_has_permissions(kick_members=True)
+    async def kick(self, ctx : discord.ApplicationContext, member: Option(discord.Member, description="The member you want to kick.", required=True), reason: Option(str, description="Reason for the kick.", required=False, default="No reason provided.")): # type: ignore
+        await ctx.defer()
+
+        if member.id == ctx.guild.owner_id:
+            await ctx.respond("You cannot kick the server owner!", ephemeral=True)
+            return
+        
+        if member.id == ctx.author.id:
+            await ctx.respond("You cannot kick yourself!", ephemeral=True)
+            return
+        
+        if member.id == self.bot.user.id:
+            await ctx.respond("I cannot kick myself!", ephemeral=True)
+
+        if ctx.author.id != ctx.guild.owner_id:
+            if member.top_role >= ctx.author.top_role:
+                await ctx.respond("You cannot kick someone with a higher or equal role!", ephemeral=True)
+                return
+            
+        if member.top_role >= ctx.guild.me.top_role:
+            await ctx.respond("I cannot kick someone with a higher or equal role than me!", ephemeral=True)
+            return
+        
+        punishment_id = self._generate_punishment_id()
+
+        try:
+            dm_embed = discord.Embed(title=f"You have been kicked from {ctx.guild.name}", color=discord.Color.orange(), timestamp=datetime.utcnow())
+            dm_embed.add_field(name="Reason", value=reason, inline=False)
+            dm_embed.add_field(name="Punishment ID", value=f"`{punishment_id}`", inline=False)
+            dm_embed.set_footer(text="If you believe this was a mistake, please contact the server moderators.")
+            await member.send(embed=dm_embed)
+            dm_sent = True
+        except (discord.Forbidden, discord.HTTPException):
+            dm_sent = False
+            logger.info(f"Could not DM user {member.id} about their kick.")
+
+        try:
+            await ctx.guild.kick(member, reason=f"[{punishment_id}] {reason} | Kicked by {ctx.author}")
+        except discord.Forbidden:
+            await ctx.respond("I don't have permission to kick this user!", ephemeral=True)
+            return
+        except discord.HTTPException as e:
+            await ctx.respond(f"Failed to kick user: {e}", ephemeral=True)
+            logger.error(f"Failed to kick user {member.id}: {e}")
+            return
+        
+        log_success = self._log_punishment(punishment_id=punishment_id, guild_id=ctx.guild.id, user_id=member.id, moderator_id=ctx.author.id, action_type="KICK", reason=reason)
+
+        if not log_success:
+            logger.error(f"Failed to log punishment {punishment_id} to database.")
+
+        await self._send_mod_log(guild=ctx.guild, punishment_id=punishment_id, action_type="KICK", user=member, moderator=ctx.author, reason=reason)
+
+        guild_check = self.db.fetch_one("SELECT id FROM guilds WHERE guild_id = %s", (ctx.guild.id,))
+        if not guild_check:
+            self.db.insert("guilds", {"guild_id": ctx.guild.id})
+        
+        confirm_embed = discord.Embed(title="Member Kicked", color=discord.Color.green(), timestamp=datetime.utcnow())
+        confirm_embed.add_field(name="User", value=f"{member.mention} (`{member.id}`)", inline=True)
+        confirm_embed.add_field(name="Punishment ID", value=f"`{punishment_id}`", inline=True)
+        confirm_embed.add_field(name="Reason", value=reason, inline=False)
+
+        if dm_sent:
+            confirm_embed.set_footer(text="User was notified via DM")
+        else:
+            confirm_embed.set_footer(text="Could not notify user via DM")
+
+        await ctx.respond(embed=confirm_embed)
+        logger.info(f"User {member. id} kicked from guild {ctx. guild.id} by {ctx. author.id} - ID: {punishment_id}")
+    
+    @kick.error
+    async def kick_error(self, ctx: discord.ApplicationContext, error):
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.respond("You don't have permission to kick members!", ephemeral=True)
+        elif isinstance(error, commands.BotMissingPermissions):
+            await ctx.respond("I don't have permission to kick members!", ephemeral=True)
+        else:
+            await ctx.respond(f"An error occured: {str(error)}", ephemeral=True)
+            logger.error(f"Kick command error: {error}")
 
 def setup(bot):
     bot.add_cog(Moderation(bot))
