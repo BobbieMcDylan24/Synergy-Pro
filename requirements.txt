@@ -1,0 +1,8 @@
+# Discord Bot Framework
+py-cord==2.4.1
+
+# Database
+mysql-connector-python==8.2.0
+
+# Environment Variables
+python-dotenv==1.0.0
