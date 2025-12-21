@@ -8,7 +8,7 @@ A powerful multi-purpose Discord bot built with **Py-cord** and **MySQL**.
 
 ## ⚠️ Development Status
 
-**This project is currently under heavy development. ** Features may change, and there may be bugs or incomplete functionality. Use in production at your own risk.
+**This project is currently under heavy development.** Features may change, and there may be bugs or incomplete functionality. Use in production at your own risk.
 
 ## 📋 Features
 
