@@ -1,6 +1,6 @@
 # Synergy Pro Discord Bot
 
-A powerful Discord moderation bot built with **Py-cord** and **MySQL**, featuring comprehensive logging and punishment tracking. 
+A powerful multi-purpose Discord bot built with **Py-cord** and **MySQL**.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Status](https://img.shields.io/badge/status-under%20development-orange.svg)
