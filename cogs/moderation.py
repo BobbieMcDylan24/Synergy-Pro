@@ -378,6 +378,45 @@ class Moderation(commands.Cog):
             await ctx.respond(f"An error occured: {str(error)}", ephemeral=True)
             logger.error(f"Timeout command error: {error}")
     
+    @mod.command(name="untimeout", description="Remove a timeout from a member.")
+    @commands.has_permissions(moderate_members=True)
+    @commands.bot_has_permissions(moderate_members=True)
+    async def untimeout(self, ctx: discord.ApplicationContext, member : Option(discord.Member, description="The member to remove timeout from", required=True), reason: Option(str, description="Reason for removing the timeout", required=False, default="No reason provided.")): # type: ignore
+        await ctx.defer()
+
+        if not member.is_timed_out():
+            await ctx.respond("This member is not timed out!", ephemeral=True)
+            return
+        
+        try:
+            await member.remove_timeout(reason=f"{reason} | Removed by {ctx.author}")
+        except discord.Forbidden:
+            await ctx.respond("I don't have permission to remove timeouts!", ephemeral=True)
+            return
+        except discord.HTTPException as e:
+            await ctx.respond(f"Failed to remove timeout: {e}", ephemeral=True)
+            logger.error(f"Failed to remove timeout from user {member.id}: {e}")
+            return
+        
+        confirm_embed = discord.Embed(title="Timeout Removed", color=discord.Color.green(), timestamp=datetime.utcnow())
+        confirm_embed.add_field(name="User", value=f"{member.mention} (`{member.id}`)", inline=True)
+        confirm_embed.add_field(name="Moderator", value=f"{ctx.author.mention}", inline=True)
+        confirm_embed.add_field(name="Reason", value=reason, inline=False)
+
+        await ctx.respond(embed=confirm_embed)
+        logger.info(f"Timeout removed from user {member.id} in guild {ctx.guild.id} by {ctx.author.id}")
+    
+    @untimeout.error
+    async def untimeout_error(self, ctx : discord.ApplicationContext, error):
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.respond("You don't have permission to remove timeouts!", ephemeral=True)
+        elif isinstance(error, commands.BotMissingPermissions):
+            await ctx.respond("I don't have permission to remove timeouts!", ephemeral=True)
+        else:
+            await ctx.respond(f"An error occurred: {str(error)}", ephemeral=True)
+            logger.error(f"Untimeout command error: {error}")
+    
+    
     
 
 def setup(bot):
