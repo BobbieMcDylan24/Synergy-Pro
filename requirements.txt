@@ -6,3 +6,6 @@ mysql-connector-python==8.2.0
 
 # Environment Variables
 python-dotenv==1.0.0
+
+# Image Processing (for rank cards)
+Pillow==10.1.0
