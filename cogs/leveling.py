@@ -155,5 +155,121 @@ class Leveling(commands.Cog):
                 logger.warning(f"Cannot send level up message in guild {message.guild.id}")
 
 
+    level = SlashCommandGroup("level", "Leveling system commands")
+
+    @level.command(name="rank", description="View your or another member's rank card")
+    async def rank(self, ctx: discord.ApplicationContext, member: Option(discord.Member, description="The member to check", required=False)): # type: ignore
+        await ctx.defer()
+        member = member or ctx.author
+
+        user_data = self._get_user_data(member.id, ctx.guild.id)
+
+        if user_data["level"] == 0 and user_data["xp"] == 0:
+            await ctx.respond("This user has no level data yet. Send a message to gain XP!")
+            return
+        
+        try:
+            img = await self.generate_level_card(member, user_data, ctx.guild.id)
+            file = discord.File(fp=img, filename="rank.png")
+            await ctx.respond(file=file)
+        except Exception as e:
+            logger.error(f"Error generating rank card: {e}")
+            await ctx.respond("Failed to generate rank card. Please try again later.", ephemeral=True)
+    
+    @level.command(name="leaderboard", description="View the server leaderboard")
+    async def leaderboard(self, ctx: discord.ApplicationContext, page: Option(int, description="Page number", required=False, default=1, min_value=1)): # type: ignore
+        await ctx.defer()
+
+        per_page = 10
+        offset = (page - 1) * per_page
+
+        query = """
+            SELECT user_id, leve, total_xp
+            FROM levels
+            WHERE guild_id = %s
+            ORDER BY level DESC, total_xp DESC
+            LIMIT %s OFFSET %s
+        """
+
+        results = self.db.fetch_all_dict(query, (ctx.guild.id, per_page, offset))
+
+        if not results:
+            await ctx.respond("No leaderboard data available yet!")
+            return
+        
+        embed = discord.Embed(title=f"{ctx.guild.name} Leaderboard", description=f"Top members by level and XP (Page {page})", color=discord.Color.gold())
+        for idx, user_data in enumerate(results, start=offset + 1):
+            user = ctx.guild.get_member(user_data["user_id"])
+            if user:
+                embed.add_field(name=f"{idx}. {user.display_name}", value=f"Level: {user_data['level']} | Total XP: {user_data['total_xp']: ,}", inline=False)
+        embed.set_footer(text=f"Page {page}")
+        await ctx.respond(embed=embed)
+
+    async def generate_level_card(self,  member : discord.Member, user_data: dict, guild_id: int) -> io.BytesIO:
+        width, height = 600, 180
+        img = Image.new("RGB", (width, height), color=(54, 57, 63))
+        draw = ImageDraw.Draw(img)
+
+        try:
+            font_bold = ImageFont.truetype("assets/fonts/arialbd.ttf", 30)
+            font_regular = ImageFont.truetype("assets/fonts/arial.ttf", 22)
+            font_small = ImageFont.truetype("assets/fonts/arial.ttf", 18)
+        except:
+            font_bold = ImageFont.load_default()
+            font_regular = ImageFont.load_default()
+            font_small = ImageFont.load_default()
+
+        rank_query = """
+            SELECT COUNT(*) + 1 as rank
+            FROM levels
+            WHERE guild_id = %s
+            AND (level > %s OR (level = %s AND total_xp > %s))
+        """
+        rank_result = self.db.fetch_one(rank_query, (guild_id, user_data['level'], user_data['level'], user_data['total_xp']))
+        rank = rank_result[0] if rank_result else 1
+
+        username = f"{member.name}"
+        if len(username) > 20:
+            username = username[:17] + "..."
+        draw.text((150, 30), username, font=font_bold, fill='white')
+
+        draw.text((150, 70), f"Rank: #{rank}", font=font_regular, fill=(200, 200, 200))
+
+        draw.text((320, 70), f"Level: {user_data['level']}", font=font_regular, fill='white')
+
+        xp_needed = self.xp_needed(user_data['level'])
+        draw.text((150, 100), f"XP: {user_data['xp']:,} / {xp_needed:,}", font=font_small, fill=(180, 180, 180))
+
+        bar_x = 150
+        bar_y = 140
+        bar_width = 400
+        bar_height = 20
+
+        draw.rectangle([bar_x, bar_y, bar_x + bar_width, bar_y + bar_height], fill=(100, 100, 100))
+        if xp_needed > 0:
+            filled_width = int((user_data['xp'] / xp_needed) * bar_width)
+            draw.rectangle([bar_x, bar_y, bar_x + filled_width, bar_y + bar_height], fill=(114, 137, 218))
+
+        try:
+            avatar_asset = member.display_avatar.with_size(128)
+            avatar_bytes = io.BytesIO()
+            await avatar_asset.save(avatar_bytes)
+            avatar_bytes.seek(0)
+            avatar_img = Image.open(avatar_bytes).resize((128, 128))
+
+            mask = Image.new('L', (128, 128), 0)
+            mask_draw = ImageDraw.Draw(mask)
+            mask_draw.ellipse((0, 0, 128, 128), fill=255)
+
+            img.paste(avatar_img, (10, 26), mask)
+        except Exception as e:
+            logger.error(f"Error loading avatar: {e}")
+
+        output = io.BytesIO()
+        img.save(output, 'PNG')
+        output.seek(0)
+        return output
+
+
 def setup(bot):
     bot.add_cog(Leveling(bot))
