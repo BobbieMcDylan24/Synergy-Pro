@@ -338,7 +338,7 @@ class Security(commands.Cog):
         msg_log.append((message, now))
 
         interval = settings["spam_time_window"]
-        with msg_log and (now - msg_log[0][1]).total_seconds() > interval:
+        while msg_log and (now - msg_log[0][1]).total_seconds() > interval:
             msg_log.popleft()
 
         if len(msg_log) >= settings["spam_message_threshold"]:
