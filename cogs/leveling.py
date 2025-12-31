@@ -93,15 +93,34 @@ class Leveling(commands.Cog):
         return result
     
     def _upsert_user_data(self, user_data: dict) -> bool:
-        query = """
-            INSERT INTO levels (user_id, guild_id, xp, level, total_xp)
-            VALUES (%s, %s, %s, %s, %s)
-            ON DUPLICATE KEY UPDATE
-                xp = VALUES(xp),
-                level = VALUES(level),
-                total_xp = VALUES(total_xp)
-        """
-        return self.db.execute_query(query, (user_data["user_id"], user_data["guild_id"], user_data["xp"], user_data["level"], user_data["total_xp"]))
+        existing = self.db.fetch_one(
+            "SELECT id FROM levels WHERE user_id = %s AND guild_id = %s",
+            (user_data["user_id"], user_data["guild_id"])
+        )
+        
+        if existing:
+            return self.db.update(
+                table="levels",
+                data={
+                    "xp":  user_data["xp"],
+                    "level": user_data["level"],
+                    "total_xp": user_data["total_xp"]
+                },
+                where_clause="user_id = %s AND guild_id = %s",
+                where_params=(user_data["user_id"], user_data["guild_id"])
+            )
+        else:
+            result = self.db.insert(
+                "levels",
+                {
+                    "user_id": user_data["user_id"],
+                    "guild_id": user_data["guild_id"],
+                    "xp": user_data["xp"],
+                    "level": user_data["level"],
+                    "total_xp":  user_data["total_xp"]
+                }
+            )
+            return result is not None
     
     @commands.Cog.listener()
     async def on_message(self, message):
@@ -184,7 +203,7 @@ class Leveling(commands.Cog):
         offset = (page - 1) * per_page
 
         query = """
-            SELECT user_id, leve, total_xp
+            SELECT user_id, level, total_xp
             FROM levels
             WHERE guild_id = %s
             ORDER BY level DESC, total_xp DESC

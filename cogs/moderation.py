@@ -377,7 +377,8 @@ class Moderation(commands.Cog):
         else:
             await ctx.respond(f"An error occured: {str(error)}", ephemeral=True)
             logger.error(f"Timeout command error: {error}")
-    
+
+
     @mod.command(name="untimeout", description="Remove a timeout from a member.")
     @commands.has_permissions(moderate_members=True)
     @commands.bot_has_permissions(moderate_members=True)
